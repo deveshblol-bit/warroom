@@ -185,21 +185,48 @@ async function main() {
         });
       }
 
+      // Always add deployment task at the end
+      console.log('  🚀 Adding deployment task...');
+      const deployNotionTask = await createTask(
+        'Deploy to Vercel',
+        idea.title,
+        'Push all changes to GitHub and deploy to Vercel. Create vercel.json config if needed. Return live URL.',
+        '⚡ High',
+        'To Do'
+      );
+
+      await supabase
+        .from('tasks')
+        .insert({
+          idea_id: idea.id,
+          title: 'Deploy to Vercel',
+          description: 'Push all changes to GitHub and deploy to Vercel. Create vercel.json config if needed. Return live URL.',
+          assigned_to: 'karpathy',
+          status: 'backlog',
+          notion_task_id: deployNotionTask.id,
+        })
+        .select()
+        .single();
+
+      console.log('    ✅ Deploy to Vercel (⚡ High)');
+
       // Update idea status to building
       await supabase
         .from('ideas')
         .update({ status: 'building' })
         .eq('id', idea.id);
 
-      console.log(`\n  🚀 ${idea.title} → ${tasks.length} tasks created in Notion + dashboard`);
+      const totalTasks = tasks.length + 1; // +1 for deployment
+      console.log(`\n  🚀 ${idea.title} → ${totalTasks} tasks created in Notion + dashboard`);
 
       // Notify War Room
       const taskList = tasks.map((t, i) => `  ${i + 1}. ${t.title} (${t.priority})`).join('\n');
+      const fullTaskList = taskList + `\n  ${tasks.length + 1}. Deploy to Vercel (⚡ High)`;
       await sendWarRoomMessage(
         `📋 <b>${idea.title}</b> → Notion\n\n` +
         `Score: ${idea.score}/5 | Priority: ${priority}\n` +
-        `Karpathy broke it into ${tasks.length} tasks:\n\n` +
-        `${taskList}\n\n` +
+        `Karpathy broke it into ${totalTasks} tasks:\n\n` +
+        `${fullTaskList}\n\n` +
         `🔗 <a href="${project.url}">View in Notion</a>`
       );
 
