@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ActivityLog, AGENT_CONFIG } from '@/types';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -21,7 +20,6 @@ export function SourceFeed({ sessionId }: { sessionId?: string }) {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
 
   useEffect(() => {
-    // Build query
     let query = supabase
       .from('activity_log')
       .select('*')
@@ -36,7 +34,6 @@ export function SourceFeed({ sessionId }: { sessionId?: string }) {
       if (data) setActivities(data);
     });
 
-    // Realtime subscription
     const channel = supabase
       .channel('activity_log_changes')
       .on(
@@ -44,7 +41,6 @@ export function SourceFeed({ sessionId }: { sessionId?: string }) {
         { event: 'INSERT', schema: 'public', table: 'activity_log' },
         (payload) => {
           const newActivity = payload.new as ActivityLog;
-          // If filtering by session, only add matching activities
           if (sessionId && newActivity.session_id !== sessionId) return;
           setActivities((prev) => [newActivity, ...prev]);
         }
@@ -57,8 +53,8 @@ export function SourceFeed({ sessionId }: { sessionId?: string }) {
   }, [sessionId]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-3 border-b border-border">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="p-3 border-b border-border shrink-0">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           🔍 Source Feed
         </h2>
@@ -66,7 +62,7 @@ export function SourceFeed({ sessionId }: { sessionId?: string }) {
           Real-time agent activity
         </p>
       </div>
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-2 space-y-2">
           {activities.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">
@@ -113,7 +109,7 @@ export function SourceFeed({ sessionId }: { sessionId?: string }) {
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

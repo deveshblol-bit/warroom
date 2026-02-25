@@ -3,15 +3,17 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Message, AGENT_CONFIG } from '@/types';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDistanceToNow } from 'date-fns';
 
 export function BrainstormChat({ sessionId }: { sessionId?: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      setMessages([]);
+      return;
+    }
 
     supabase
       .from('messages')
@@ -39,20 +41,22 @@ export function BrainstormChat({ sessionId }: { sessionId?: string }) {
   }, [sessionId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
   }, [messages]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-3 border-b border-border">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="p-3 border-b border-border shrink-0">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           💬 Brainstorm
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          {sessionId ? 'Live conversation' : 'No active session'}
+          {sessionId ? `${messages.length} messages` : 'No active session'}
         </p>
       </div>
-      <ScrollArea className="flex-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
         <div className="p-3 space-y-4">
           {!sessionId && (
             <p className="text-sm text-muted-foreground text-center py-8">
@@ -88,9 +92,8 @@ export function BrainstormChat({ sessionId }: { sessionId?: string }) {
               </div>
             );
           })}
-          <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

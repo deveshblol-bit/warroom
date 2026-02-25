@@ -69,24 +69,24 @@ export default function Home() {
       />
 
       {/* Desktop: 3-column layout */}
-      <div className="flex-1 hidden lg:flex overflow-hidden">
+      <div className="flex-1 hidden lg:flex min-h-0">
         {/* Left: Source Feed */}
-        <div className="w-80 border-r border-border overflow-hidden">
+        <div className="w-80 border-r border-border flex flex-col min-h-0">
           <SourceFeed sessionId={activeSession?.id} />
         </div>
 
         {/* Center: Brainstorm + Kanban */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 flex flex-col min-h-0">
             <BrainstormChat sessionId={activeSession?.id} />
           </div>
-          <div className="h-64 border-t border-border overflow-hidden">
+          <div className="h-64 border-t border-border shrink-0 overflow-hidden">
             <KanbanBoard />
           </div>
         </div>
 
         {/* Right: Ideas */}
-        <div className="w-80 border-l border-border overflow-hidden">
+        <div className="w-80 border-l border-border flex flex-col min-h-0">
           <IdeaBoard />
         </div>
       </div>
