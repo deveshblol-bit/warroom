@@ -9,6 +9,7 @@
 
 import { execSync } from 'child_process';
 import { resolve } from 'path';
+import { sendWarRoomMessage } from '../lib/telegram';
 
 const QUERIES = process.argv.find(a => a.startsWith('--queries='))?.split('=')[1] || '3';
 const ROUNDS = process.argv.find(a => a.startsWith('--rounds='))?.split('=')[1] || '3';
@@ -33,6 +34,12 @@ function run(cmd: string): string {
 
 async function main() {
   console.log('🚀 War Room Pipeline Starting...\n');
+
+  await sendWarRoomMessage(
+    `🔍 <b>Nikita &amp; Paras are hunting for ideas...</b>\n\n` +
+    `Scouring Twitter, HN, Product Hunt, Reddit &amp; blogs.\n` +
+    `Will ping you when they find something worth reviewing.`
+  );
 
   // Step 1: Discovery
   const discoverOutput = run(`npx tsx ${scriptsDir}/discover.ts --queries=${QUERIES}`);
