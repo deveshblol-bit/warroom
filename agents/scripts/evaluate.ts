@@ -201,9 +201,9 @@ async function main() {
   console.log(`\n📋 Final ideas (${merged.length}):\n`);
 
   // Save to Supabase
+  const savedIdeas: (MergedIdea & { id: string })[] = [];
   for (const idea of merged) {
-    const status = idea.agents_who_picked.length >= 2 && idea.score >= 4 ? 'approved' : 'draft';
-
+    // All ideas start as 'draft' — Devesh approves in War Room group
     const { data, error } = await supabase
       .from('ideas')
       .insert({
@@ -214,7 +214,7 @@ async function main() {
         nikita_take: idea.nikita_take,
         paras_take: idea.paras_take,
         karpathy_take: idea.karpathy_take,
-        status,
+        status: 'draft',
       })
       .select()
       .single();
@@ -222,17 +222,32 @@ async function main() {
     if (error) {
       console.error(`  Failed to save "${idea.title}":`, error.message);
     } else {
-      console.log(`  ✅ ${idea.title} — score: ${idea.score}/5, status: ${status}, picked by: ${idea.agents_who_picked.join(', ')}`);
+      savedIdeas.push({ ...idea, id: data.id });
+      console.log(`  ✅ ${idea.title} — score: ${idea.score}/5, picked by: ${idea.agents_who_picked.join(', ')}`);
 
-      await logActivity('nikita', 'idea', `⭐ ${idea.title}`, `Score: ${idea.score}/5 | Status: ${status} | ${idea.description.slice(0, 150)}`, {
+      await logActivity('nikita', 'idea', `⭐ ${idea.title}`, `Score: ${idea.score}/5 | ${idea.description.slice(0, 150)}`, {
         sessionId: SESSION_ID!,
-        metadata: { ideaId: data.id, score: idea.score, status, agents: idea.agents_who_picked },
+        metadata: { ideaId: data.id, score: idea.score, agents: idea.agents_who_picked },
       });
     }
   }
 
-  console.log(`\n✅ Evaluation complete! ${merged.length} ideas saved.`);
-  console.log(`   Check dashboard: https://warroom-navy.vercel.app/`);
+  console.log(`\n✅ Evaluation complete! ${merged.length} ideas saved as drafts.`);
+  console.log(`   Awaiting Devesh's approval in War Room group.`);
+  console.log(`   Dashboard: https://warroom-navy.vercel.app/`);
+
+  // Output ideas summary for the approval message
+  const summary = savedIdeas.map((idea, i) => {
+    const stars = '★'.repeat(idea.score) + '☆'.repeat(5 - idea.score);
+    const agents = idea.agents_who_picked.join(', ');
+    return `${i + 1}. **${idea.title}** ${stars}\n   ${idea.description.slice(0, 120)}...\n   Picked by: ${agents}`;
+  }).join('\n\n');
+
+  // Write summary to stdout for the pipeline to pick up
+  console.log('\n---APPROVAL_SUMMARY---');
+  console.log(summary);
+  console.log('---END_SUMMARY---');
+  console.log(`\nSession: ${SESSION_ID}`);
 }
 
 main().catch(console.error);
