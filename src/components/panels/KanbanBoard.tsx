@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Task, TaskStatus, AGENT_CONFIG } from '@/types';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,6 +15,9 @@ const COLUMNS: { key: TaskStatus; label: string; icon: string }[] = [
 
 export function KanbanBoard() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [width, setWidth] = useState(600); // Default width in pixels
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
 
   useEffect(() => {
     supabase
@@ -47,8 +50,36 @@ export function KanbanBoard() {
     };
   }, []);
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const newWidth = e.clientX - rect.left;
+      if (newWidth >= 400 && newWidth <= 1400) {
+        setWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   return (
-    <div className="flex flex-col h-full">
+    <div ref={containerRef} className="flex flex-col h-full relative" style={{ width: `${width}px` }}>
       <div className="p-3 border-b border-border">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           📋 Kanban
@@ -109,6 +140,12 @@ export function KanbanBoard() {
           })}
         </div>
       </div>
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-border hover:bg-blue-500 hover:w-1.5 transition-all"
+        title="Drag to resize"
+      />
     </div>
   );
 }
