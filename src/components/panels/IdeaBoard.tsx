@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Idea, AGENT_CONFIG } from '@/types';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -50,8 +49,8 @@ export function IdeaBoard() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-3 border-b border-border">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="p-3 border-b border-border shrink-0">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           ⭐ Ideas
         </h2>
@@ -59,7 +58,7 @@ export function IdeaBoard() {
           {ideas.length} idea{ideas.length !== 1 ? 's' : ''}
         </p>
       </div>
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-2 space-y-2">
           {ideas.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">
@@ -121,7 +120,7 @@ export function IdeaBoard() {
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
