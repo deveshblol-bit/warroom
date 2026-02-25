@@ -66,7 +66,7 @@ export async function createTask(
   projectName: string,
   notes: string = '',
   priority: '🔥 Urgent' | '⚡ High' | '📌 Medium' | '💤 Low' = '📌 Medium',
-  status: string = 'To Do'
+  status: string = 'Draft'
 ): Promise<{ id: string; url: string }> {
   const page = await notionFetch('/pages', {
     parent: { database_id: TASKS_DB },
