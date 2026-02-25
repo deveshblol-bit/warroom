@@ -80,7 +80,7 @@ export default function Home() {
           <div className="flex-1 flex flex-col min-h-0">
             <BrainstormChat sessionId={activeSession?.id} />
           </div>
-          <div className="shrink-0 max-h-[450px] overflow-y-auto border-t border-border">
+          <div className="h-64 border-t border-border shrink-0 overflow-hidden">
             <KanbanBoard />
           </div>
         </div>
