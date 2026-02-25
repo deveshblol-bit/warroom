@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Session } from '@/types';
 import { Header } from '@/components/dashboard/Header';
@@ -13,6 +13,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const [kanbanHeight, setKanbanHeight] = useState(300);
+  const centerRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current || !centerRef.current) return;
+      const rect = centerRef.current.getBoundingClientRect();
+      const newHeight = rect.bottom - e.clientY;
+      if (newHeight >= 120 && newHeight <= rect.height - 120) {
+        setKanbanHeight(newHeight);
+      }
+    };
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
 
   useEffect(() => {
     // Fetch all sessions (most recent first)
@@ -76,11 +104,17 @@ export default function Home() {
         </div>
 
         {/* Center: Brainstorm + Kanban */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div ref={centerRef} className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 flex flex-col min-h-0">
             <BrainstormChat sessionId={activeSession?.id} />
           </div>
-          <div className="h-64 border-t border-border shrink-0 overflow-hidden">
+          {/* Vertical resize handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            className="h-1 cursor-row-resize bg-border hover:bg-blue-500 transition-colors shrink-0"
+            title="Drag to resize kanban"
+          />
+          <div className="shrink-0 overflow-hidden flex flex-col" style={{ height: `${kanbanHeight}px` }}>
             <KanbanBoard />
           </div>
         </div>
