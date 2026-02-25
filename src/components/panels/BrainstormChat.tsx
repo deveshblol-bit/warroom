@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Message, AGENT_CONFIG } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export function BrainstormChat({ sessionId }: { sessionId?: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -85,9 +87,17 @@ export function BrainstormChat({ sessionId }: { sessionId?: string }) {
                       {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
                     </span>
                   </div>
-                  <p className="text-sm text-foreground whitespace-pre-wrap">
-                    {msg.content}
-                  </p>
+                  <div className="text-sm text-foreground prose prose-invert prose-sm max-w-none
+                    prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5
+                    prose-strong:text-foreground prose-strong:font-semibold
+                    prose-code:text-emerald-400 prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
+                    prose-pre:bg-muted prose-pre:rounded-lg prose-pre:p-3
+                    prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline
+                    prose-headings:text-foreground prose-headings:font-semibold prose-headings:mt-2 prose-headings:mb-1">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             );

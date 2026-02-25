@@ -92,24 +92,24 @@ export default function Home() {
       </div>
 
       {/* Mobile: Tabs */}
-      <div className="flex-1 lg:hidden overflow-hidden">
-        <Tabs defaultValue="feed" className="h-full flex flex-col">
-          <TabsList className="mx-2 mt-2">
+      <div className="flex-1 lg:hidden flex flex-col min-h-0">
+        <Tabs defaultValue="chat" className="flex-1 flex flex-col min-h-0">
+          <TabsList className="mx-2 mt-2 shrink-0">
             <TabsTrigger value="feed">🔍 Feed</TabsTrigger>
             <TabsTrigger value="chat">💬 Chat</TabsTrigger>
             <TabsTrigger value="ideas">⭐ Ideas</TabsTrigger>
             <TabsTrigger value="kanban">📋 Tasks</TabsTrigger>
           </TabsList>
-          <TabsContent value="feed" className="flex-1 overflow-hidden">
+          <TabsContent value="feed" className="flex-1 flex flex-col min-h-0 mt-0 data-[state=inactive]:hidden">
             <SourceFeed sessionId={activeSession?.id} />
           </TabsContent>
-          <TabsContent value="chat" className="flex-1 overflow-hidden">
+          <TabsContent value="chat" className="flex-1 flex flex-col min-h-0 mt-0 data-[state=inactive]:hidden">
             <BrainstormChat sessionId={activeSession?.id} />
           </TabsContent>
-          <TabsContent value="ideas" className="flex-1 overflow-hidden">
+          <TabsContent value="ideas" className="flex-1 flex flex-col min-h-0 mt-0 data-[state=inactive]:hidden">
             <IdeaBoard />
           </TabsContent>
-          <TabsContent value="kanban" className="flex-1 overflow-hidden">
+          <TabsContent value="kanban" className="flex-1 flex flex-col min-h-0 mt-0 data-[state=inactive]:hidden">
             <KanbanBoard />
           </TabsContent>
         </Tabs>
