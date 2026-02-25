@@ -16,6 +16,7 @@ import { PERSONAS } from '../lib/personas';
 import { logActivity } from '../lib/logger';
 import { supabase } from '../lib/supabase';
 import { createProject, createTask } from '../lib/notion';
+import { sendWarRoomMessage } from '../lib/telegram';
 
 const SESSION_ID = process.argv.find(a => a.startsWith('--session='))?.split('=')[1];
 
@@ -168,6 +169,16 @@ async function main() {
         .eq('id', idea.id);
 
       console.log(`\n  🚀 ${idea.title} → ${tasks.length} tasks created in Notion + dashboard`);
+
+      // Notify War Room
+      const taskList = tasks.map((t, i) => `  ${i + 1}. ${t.title} (${t.priority})`).join('\n');
+      await sendWarRoomMessage(
+        `📋 <b>${idea.title}</b> → Notion\n\n` +
+        `Score: ${idea.score}/5 | Priority: ${priority}\n` +
+        `Karpathy broke it into ${tasks.length} tasks:\n\n` +
+        `${taskList}\n\n` +
+        `🔗 <a href="${project.url}">View in Notion</a>`
+      );
 
     } catch (err: any) {
       console.error(`  ❌ Failed for "${idea.title}":`, err.message);
