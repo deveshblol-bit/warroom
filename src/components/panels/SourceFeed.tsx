@@ -17,19 +17,24 @@ const TYPE_ICONS: Record<string, string> = {
   pr: '📬',
 };
 
-export function SourceFeed() {
+export function SourceFeed({ sessionId }: { sessionId?: string }) {
   const [activities, setActivities] = useState<ActivityLog[]>([]);
 
   useEffect(() => {
-    // Initial fetch
-    supabase
+    // Build query
+    let query = supabase
       .from('activity_log')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(100)
-      .then(({ data }) => {
-        if (data) setActivities(data);
-      });
+      .limit(100);
+
+    if (sessionId) {
+      query = query.eq('session_id', sessionId);
+    }
+
+    query.then(({ data }) => {
+      if (data) setActivities(data);
+    });
 
     // Realtime subscription
     const channel = supabase
@@ -38,7 +43,10 @@ export function SourceFeed() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'activity_log' },
         (payload) => {
-          setActivities((prev) => [payload.new as ActivityLog, ...prev]);
+          const newActivity = payload.new as ActivityLog;
+          // If filtering by session, only add matching activities
+          if (sessionId && newActivity.session_id !== sessionId) return;
+          setActivities((prev) => [newActivity, ...prev]);
         }
       )
       .subscribe();
@@ -46,7 +54,7 @@ export function SourceFeed() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [sessionId]);
 
   return (
     <div className="flex flex-col h-full">

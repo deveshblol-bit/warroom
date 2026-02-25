@@ -11,31 +11,45 @@ import { KanbanBoard } from '@/components/panels/KanbanBoard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function Home() {
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    // Fetch latest active session
+    // Fetch all sessions (most recent first)
     supabase
       .from('sessions')
       .select('*')
-      .neq('status', 'completed')
       .order('started_at', { ascending: false })
-      .limit(1)
+      .limit(20)
       .then(({ data }) => {
-        if (data && data.length > 0) setActiveSession(data[0]);
+        if (data && data.length > 0) {
+          setSessions(data);
+          // Pick the first non-completed session, or the latest one
+          const active = data.find((s) => s.status !== 'completed') || data[0];
+          setActiveSession(active);
+        }
       });
 
-    // Listen for new sessions
+    // Listen for new/updated sessions
     const channel = supabase
       .channel('sessions_changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sessions' },
         (payload) => {
+          const updated = payload.new as Session;
+          setSessions((prev) => {
+            const existing = prev.findIndex((s) => s.id === updated.id);
+            if (existing >= 0) {
+              const next = [...prev];
+              next[existing] = updated;
+              return next;
+            }
+            return [updated, ...prev];
+          });
+          // Auto-switch to new sessions
           if (payload.eventType === 'INSERT') {
-            setActiveSession(payload.new as Session);
-          } else if (payload.eventType === 'UPDATE') {
-            setActiveSession(payload.new as Session);
+            setActiveSession(updated);
           }
         }
       )
@@ -48,13 +62,17 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground dark">
-      <Header />
+      <Header
+        sessions={sessions}
+        activeSession={activeSession}
+        onSessionSelect={setActiveSession}
+      />
 
       {/* Desktop: 3-column layout */}
       <div className="flex-1 hidden lg:flex overflow-hidden">
         {/* Left: Source Feed */}
         <div className="w-80 border-r border-border overflow-hidden">
-          <SourceFeed />
+          <SourceFeed sessionId={activeSession?.id} />
         </div>
 
         {/* Center: Brainstorm + Kanban */}
@@ -83,7 +101,7 @@ export default function Home() {
             <TabsTrigger value="kanban">📋 Tasks</TabsTrigger>
           </TabsList>
           <TabsContent value="feed" className="flex-1 overflow-hidden">
-            <SourceFeed />
+            <SourceFeed sessionId={activeSession?.id} />
           </TabsContent>
           <TabsContent value="chat" className="flex-1 overflow-hidden">
             <BrainstormChat sessionId={activeSession?.id} />
