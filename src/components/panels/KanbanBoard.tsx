@@ -13,7 +13,11 @@ const COLUMNS: { key: TaskStatus; label: string; icon: string }[] = [
   { key: 'done', label: 'Done', icon: '✅' },
 ];
 
-export function KanbanBoard() {
+interface KanbanBoardProps {
+  fullScreen?: boolean;
+}
+
+export function KanbanBoard({ fullScreen = false }: KanbanBoardProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
@@ -49,17 +53,19 @@ export function KanbanBoard() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-3 border-b border-border">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          📋 Kanban
-        </h2>
-      </div>
+      {!fullScreen && (
+        <div className="p-3 border-b border-border">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            📋 Kanban
+          </h2>
+        </div>
+      )}
       <div className="flex-1 overflow-x-auto">
-        <div className="flex gap-3 p-3 min-w-max h-full">
+        <div className={`flex gap-${fullScreen ? '6' : '3'} p-${fullScreen ? '4' : '3'} min-w-max h-full`}>
           {COLUMNS.map((col) => {
             const colTasks = tasks.filter((t) => t.status === col.key);
             return (
-              <div key={col.key} className="w-56 flex flex-col">
+              <div key={col.key} className={fullScreen ? 'flex-1 min-w-80 flex flex-col' : 'w-56 flex flex-col'}>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm">{col.icon}</span>
                   <span className="text-xs font-semibold text-muted-foreground uppercase">

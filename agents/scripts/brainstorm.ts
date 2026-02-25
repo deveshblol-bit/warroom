@@ -1,15 +1,10 @@
 /**
- * Brainstorm Script — All 3 agents discuss discovered sources
+ * Brainstorm Script — Real group chat between 3 agents
  * 
- * Usage: npx tsx agents/scripts/brainstorm.ts --session=<session_id> [--rounds=4]
+ * Usage: npx tsx agents/scripts/brainstorm.ts --session=<session_id> [--rounds=10]
  * 
- * What it does:
- * 1. Loads discovered sources from the session's activity_log
- * 2. Nikita kicks off with growth/distribution perspective
- * 3. Paras responds with strategy/experimentation lens
- * 4. Karpathy weighs in on technical feasibility
- * 5. They go back and forth for N rounds
- * 6. All messages logged in real-time to Supabase → visible on dashboard
+ * Agents have a natural conversation — they react to each other,
+ * build on ideas, disagree, riff. Not a rigid round-robin.
  */
 
 import { chat } from '../lib/openai';
@@ -18,14 +13,14 @@ import { logMessage, logActivity, updateSession } from '../lib/logger';
 import { supabase } from '../lib/supabase';
 
 const SESSION_ID = process.argv.find(a => a.startsWith('--session='))?.split('=')[1];
-const ROUNDS = parseInt(process.argv.find(a => a.startsWith('--rounds='))?.split('=')[1] || '4');
+const ROUNDS = parseInt(process.argv.find(a => a.startsWith('--rounds='))?.split('=')[1] || '10');
 
 if (!SESSION_ID) {
   console.error('Usage: npx tsx agents/scripts/brainstorm.ts --session=<session_id>');
   process.exit(1);
 }
 
-interface ConversationMessage {
+interface ChatMessage {
   agent: AgentName;
   content: string;
 }
@@ -45,115 +40,185 @@ async function loadSources(sessionId: string): Promise<string> {
     .join('\n\n');
 }
 
-function buildConversationContext(
+/**
+ * Build the chat thread as OpenAI messages for a specific agent.
+ * The agent sees the full conversation as a group chat — other agents' 
+ * messages come as "user" messages tagged with their name.
+ */
+function buildChatThread(
   sources: string,
-  history: ConversationMessage[],
-  currentAgent: AgentName
+  history: ChatMessage[],
+  currentAgent: AgentName,
+  prompt: string
 ): { role: 'user' | 'assistant'; content: string }[] {
   const messages: { role: 'user' | 'assistant'; content: string }[] = [];
 
-  // First message always includes sources context
-  if (history.length === 0) {
-    messages.push({
-      role: 'user',
-      content: `Here are the sources our team discovered today. Review them and share your top insights — what excites you? What product opportunities do you see?\n\n${sources}`,
-    });
-  } else {
-    // Include sources as context + conversation history
-    messages.push({
-      role: 'user',
-      content: `Context — sources discovered today:\n${sources}\n\n---\nConversation so far:`,
-    });
+  // System context: sources (only once, at the start)
+  messages.push({
+    role: 'user',
+    content: `[CONTEXT] Here are the sources the team discovered today:\n\n${sources}\n\n---\n\nYou're in a group chat with ${Object.values(PERSONAS).filter(p => p.name !== PERSONAS[currentAgent].name).map(p => p.name).join(' and ')}. This is a brainstorming session. Be natural — react to what others say, build on their ideas, push back when you disagree. Talk like you would in a real group chat, not a presentation.`,
+  });
 
-    for (const msg of history) {
-      if (msg.agent === currentAgent) {
-        messages.push({ role: 'assistant', content: msg.content });
-      } else {
-        messages.push({
-          role: 'user',
-          content: `[${PERSONAS[msg.agent].name}]: ${msg.content}`,
-        });
-      }
+  // Replay the full conversation
+  for (const msg of history) {
+    if (msg.agent === currentAgent) {
+      messages.push({ role: 'assistant', content: msg.content });
+    } else {
+      messages.push({
+        role: 'user',
+        content: `${PERSONAS[msg.agent].name}: ${msg.content}`,
+      });
     }
-
-    // Prompt the current agent to respond
-    const otherAgents = history
-      .filter(m => m.agent !== currentAgent)
-      .map(m => PERSONAS[m.agent].name);
-    
-    messages.push({
-      role: 'user',
-      content: `Respond to the points above. Build on what resonates, push back on what doesn't. What's your take?`,
-    });
   }
+
+  // The prompt for this turn
+  messages.push({ role: 'user', content: prompt });
 
   return messages;
 }
 
+/**
+ * Pick who speaks next. Not pure round-robin — adds some dynamics:
+ * - The agent who was just addressed/challenged is more likely to respond
+ * - Nikita tends to jump in when someone says something about distribution
+ * - Some randomness to keep it natural
+ */
+function pickNextSpeaker(history: ChatMessage[], lastSpeaker: AgentName | null): AgentName {
+  const agents: AgentName[] = ['nikita', 'paras', 'karpathy'];
+  
+  if (history.length === 0) return 'nikita'; // Nikita always kicks off
+  
+  const lastMsg = history[history.length - 1];
+  const lastContent = lastMsg.content.toLowerCase();
+  
+  // If someone was directly referenced, they respond
+  if (lastContent.includes('nikita') && lastMsg.agent !== 'nikita') return 'nikita';
+  if (lastContent.includes('paras') && lastMsg.agent !== 'paras') return 'paras';
+  if (lastContent.includes('karpathy') && lastMsg.agent !== 'karpathy') return 'karpathy';
+  
+  // If last message asked a question or challenged, someone else responds
+  const others = agents.filter(a => a !== lastSpeaker);
+  
+  // Weighted selection — agent who spoke least gets priority
+  const counts = agents.reduce((acc, a) => {
+    acc[a] = history.filter(m => m.agent === a).length;
+    return acc;
+  }, {} as Record<AgentName, number>);
+  
+  // Sort others by least spoken
+  others.sort((a, b) => counts[a] - counts[b]);
+  
+  // 70% chance least-spoken agent goes, 30% the other
+  return Math.random() < 0.7 ? others[0] : others[1];
+}
+
+/**
+ * Generate a natural prompt based on conversation state.
+ * Early rounds: react to sources. Mid rounds: build on each other.
+ * Late rounds: converge on ideas.
+ */
+function getPrompt(round: number, totalRounds: number, history: ChatMessage[], agent: AgentName): string {
+  const phase = round / totalRounds;
+  const lastMsg = history.length > 0 ? history[history.length - 1] : null;
+  const lastName = lastMsg ? PERSONAS[lastMsg.agent].name : null;
+  
+  if (history.length === 0) {
+    return `You just saw these sources. What jumps out? What's the most interesting pattern or opportunity? Kick off the brainstorm — be opinionated.`;
+  }
+  
+  if (phase < 0.3) {
+    // Early: react and riff
+    const prompts = [
+      `${lastName} just shared their take. What do you think? Agree? Disagree? What are they missing?`,
+      `React to what ${lastName} said. Build on it or push back. What opportunity do you see?`,
+      `${lastName} made some interesting points. What's your angle on this?`,
+    ];
+    return prompts[Math.floor(Math.random() * prompts.length)];
+  }
+  
+  if (phase < 0.7) {
+    // Mid: debate and refine
+    const prompts = [
+      `The conversation's heating up. Where do you agree and disagree with the group? Push the thinking further.`,
+      `Build on what's been said. What specific product idea is forming? Poke holes in anything that's weak.`,
+      `React to ${lastName}'s point. Are they right? What would you add or change?`,
+      `You've heard everyone's takes. What's the idea that keeps coming back? Why does it work (or not)?`,
+      `Challenge something someone said. What's the blind spot in the group's thinking right now?`,
+    ];
+    return prompts[Math.floor(Math.random() * prompts.length)];
+  }
+  
+  // Late: converge
+  const prompts = [
+    `We're getting close. What's the strongest idea on the table? Sharpen it — give it a name, a one-liner, and the key insight.`,
+    `Time to converge. Which idea has the best shot? Be specific about why.`,
+    `Final thoughts on this thread. What idea should we actually build? Give a concrete take.`,
+  ];
+  return prompts[Math.floor(Math.random() * prompts.length)];
+}
+
 async function runBrainstorm() {
-  console.log(`🧠 Starting brainstorm session: ${SESSION_ID}\n`);
+  console.log(`🧠 Brainstorm session: ${SESSION_ID}`);
+  console.log(`   Rounds: ${ROUNDS}\n`);
 
-  // Load sources
   const sources = await loadSources(SESSION_ID!);
-  console.log(`📚 Loaded sources from discovery phase\n`);
+  console.log(`📚 Loaded sources\n`);
 
-  await logActivity('nikita', 'analyze', '🧠 Brainstorm starting', 'Reviewing discovered sources...', {
+  await logActivity('nikita', 'analyze', '🧠 Brainstorm starting', 'The war room is live. Reviewing sources...', {
     sessionId: SESSION_ID!,
   });
 
-  const history: ConversationMessage[] = [];
-
-  // Agent speaking order — rotates each round
-  const speakingOrder: AgentName[] = ['nikita', 'paras', 'karpathy'];
+  const history: ChatMessage[] = [];
+  let lastSpeaker: AgentName | null = null;
 
   for (let round = 0; round < ROUNDS; round++) {
-    console.log(`\n--- Round ${round + 1}/${ROUNDS} ---\n`);
-
-    for (const agent of speakingOrder) {
-      const persona = PERSONAS[agent];
-      const context = buildConversationContext(sources, history, agent);
-
-      console.log(`[${persona.name}] Thinking...`);
-
-      try {
-        const response = await chat(persona.systemPrompt, context, {
-          temperature: 0.9,
-          maxTokens: 400,
-        });
-
-        // Log to Supabase (appears on dashboard in real-time)
-        await logMessage(SESSION_ID!, agent, response);
-
-        // Log activity too
-        await logActivity(agent, 'analyze', `💬 ${persona.name} speaking`, response.slice(0, 150) + '...', {
-          sessionId: SESSION_ID!,
-        });
-
-        history.push({ agent, content: response });
-
-        console.log(`[${persona.name}]: ${response}\n`);
-      } catch (err: any) {
-        console.error(`[${persona.name}] Error:`, err.message);
-      }
-
-      // Small delay between agents
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }
-
-  // Final summary round — each agent picks their top idea
-  console.log('\n--- Final Takes ---\n');
-
-  for (const agent of speakingOrder) {
+    const agent = pickNextSpeaker(history, lastSpeaker);
     const persona = PERSONAS[agent];
-    const summaryContext = buildConversationContext(sources, history, agent);
-    summaryContext.push({
-      role: 'user',
-      content: `Based on everything discussed, what's the ONE product idea you'd bet on? Give it a name, one-line description, and why it would work. Be specific.`,
-    });
+    const prompt = getPrompt(round, ROUNDS, history, agent);
+
+    console.log(`[Round ${round + 1}/${ROUNDS}] ${persona.name} thinking...`);
 
     try {
-      const response = await chat(persona.systemPrompt, summaryContext, {
+      const thread = buildChatThread(sources, history, agent, prompt);
+      
+      const response = await chat(persona.systemPrompt, thread, {
+        temperature: 0.95,
+        maxTokens: 250, // shorter, punchier messages
+      });
+
+      // Log to Supabase messages (shows in dashboard chat panel)
+      await logMessage(SESSION_ID!, agent, response);
+
+      // Log to activity feed
+      await logActivity(agent, 'analyze', `💬 ${persona.name}`, response.slice(0, 150) + '...', {
+        sessionId: SESSION_ID!,
+      });
+
+      history.push({ agent, content: response });
+      lastSpeaker = agent;
+
+      console.log(`[${persona.name}]: ${response}\n`);
+    } catch (err: any) {
+      console.error(`[${persona.name}] Error:`, err.message);
+    }
+
+    // Natural pacing — slight delay
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // === FINAL PICKS ===
+  console.log('\n🏆 Final Picks\n');
+
+  const allAgents: AgentName[] = ['nikita', 'paras', 'karpathy'];
+  
+  for (const agent of allAgents) {
+    const persona = PERSONAS[agent];
+    const thread = buildChatThread(sources, history, agent,
+      `Alright, final pick time. Based on everything discussed, what's THE ONE product idea you'd bet on? Give it:\n- A name\n- One-line description\n- The key insight (why this works)\n- Score it 1-5 on viability\n\nBe specific. No hedging.`
+    );
+
+    try {
+      const response = await chat(persona.systemPrompt, thread, {
         temperature: 0.7,
         maxTokens: 300,
       });
@@ -164,19 +229,18 @@ async function runBrainstorm() {
       });
 
       history.push({ agent, content: `🏆 MY TOP PICK:\n\n${response}` });
-      console.log(`[${persona.name}] TOP PICK: ${response}\n`);
+      console.log(`[${persona.name}] 🏆 ${response}\n`);
     } catch (err: any) {
       console.error(`[${persona.name}] Error:`, err.message);
     }
   }
 
-  // Update session
   await updateSession(SESSION_ID!, { status: 'completed', ended_at: new Date().toISOString() });
 
   console.log('\n✅ Brainstorm complete!');
-  console.log(`   ${history.length} messages exchanged`);
+  console.log(`   ${history.length} messages (${ROUNDS} rounds + 3 final picks)`);
   console.log(`   Session: ${SESSION_ID}`);
-  console.log(`   Check dashboard: https://warroom-navy.vercel.app/`);
+  console.log(`   Dashboard: https://warroom-navy.vercel.app/`);
 }
 
 runBrainstorm().catch(console.error);

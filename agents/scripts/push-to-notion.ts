@@ -15,7 +15,7 @@ import { chat } from '../lib/openai';
 import { PERSONAS } from '../lib/personas';
 import { logActivity } from '../lib/logger';
 import { supabase } from '../lib/supabase';
-import { createProject, createTask } from '../lib/notion';
+import { createProject, createTask, readPageContent, findProject } from '../lib/notion';
 import { sendWarRoomMessage } from '../lib/telegram';
 
 const SESSION_ID = process.argv.find(a => a.startsWith('--session='))?.split('=')[1];
@@ -26,36 +26,43 @@ interface TaskBreakdown {
   priority: '⚡ High' | '📌 Medium' | '💤 Low';
 }
 
-const TASK_BREAKDOWN_PROMPT = `You are breaking down a product idea into concrete engineering tasks. 
+const TASK_BREAKDOWN_PROMPT = `You are Karpathy. You've just received a PRD from Nikita and Paras. Break it into concrete engineering tasks.
 
-Given the idea below, create 3-5 tasks that an engineer would need to complete to build an MVP. Each task should be specific, actionable, and completeable in 1-3 hours.
+Create 5-8 tasks that you'd need to complete to build this MVP. Each task should be specific, actionable, and completeable in 1-3 hours.
 
 Return a JSON array with this exact format:
 [
   {
     "title": "Short task title",
-    "description": "Specific description of what to build/implement",
+    "description": "Specific description of what to build/implement. Include tech details, file structure, APIs to use, etc.",
     "priority": "⚡ High" or "📌 Medium" or "💤 Low"
   }
 ]
 
 Rules:
-- First task should always be repo setup / project scaffold
-- Order tasks by dependency (what needs to be built first)
-- Focus on MVP — minimum viable version only
-- Be specific about tech choices (React, Next.js, etc.)
+- First task: repo setup / project scaffold with the recommended tech stack from the PRD
+- Order by dependency (what needs to be built first)
+- Map tasks to the MVP features listed in the PRD
+- Include a task for the growth/viral mechanic if the PRD specifies one
+- Include a task for analytics/metrics tracking from the PRD's success metrics
+- Be specific about tech choices, file paths, component names
+- Focus on MVP only — respect the "Out of Scope" section from the PRD
 - Return ONLY valid JSON, no markdown fences`;
 
-async function breakdownIntoTasks(ideaTitle: string, ideaDescription: string): Promise<TaskBreakdown[]> {
+async function breakdownIntoTasks(ideaTitle: string, ideaDescription: string, prd?: string): Promise<TaskBreakdown[]> {
+  const context = prd
+    ? `--- PRD (from Nikita & Paras) ---\nTitle: ${ideaTitle}\n\n${prd}`
+    : `--- IDEA ---\nTitle: ${ideaTitle}\nDescription: ${ideaDescription}`;
+
   const response = await chat(
     PERSONAS.karpathy.systemPrompt,
     [
       {
         role: 'user',
-        content: `${TASK_BREAKDOWN_PROMPT}\n\n--- IDEA ---\nTitle: ${ideaTitle}\nDescription: ${ideaDescription}`,
+        content: `${TASK_BREAKDOWN_PROMPT}\n\n${context}`,
       },
     ],
-    { temperature: 0.3, maxTokens: 800 }
+    { temperature: 0.3, maxTokens: 1200 }
   );
 
   try {
@@ -121,13 +128,29 @@ async function main() {
         metadata: { notionPageId: project.id },
       });
 
-      // 2. Break into tasks via Karpathy
+      // 2. Read PRD from Notion (if it exists)
+      let prd: string | undefined;
+      if (project.id) {
+        console.log('  📖 Reading PRD from Notion...');
+        try {
+          const content = await readPageContent(project.id);
+          if (content && content.length > 50) {
+            prd = content;
+            console.log(`  ✅ PRD loaded (${content.length} chars)`);
+          }
+        } catch (err: any) {
+          console.log(`  ⚠️ No PRD found on Notion page, using idea description`);
+        }
+      }
+
+      // 3. Karpathy breaks into tasks (using PRD if available)
       console.log('  🔨 Karpathy breaking into tasks...');
-      await logActivity('karpathy', 'analyze', `🔨 Breaking down: ${idea.title}`, 'Creating engineering tasks for MVP...', {
+      await logActivity('karpathy', 'analyze', `🔨 Breaking down: ${idea.title}`, 
+        prd ? 'Reading PRD from Notion and creating tasks...' : 'Creating engineering tasks for MVP...', {
         sessionId: idea.session_id,
       });
 
-      const tasks = await breakdownIntoTasks(idea.title, idea.description);
+      const tasks = await breakdownIntoTasks(idea.title, idea.description, prd);
       console.log(`  Found ${tasks.length} tasks`);
 
       for (const task of tasks) {

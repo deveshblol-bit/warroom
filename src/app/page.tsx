@@ -9,6 +9,7 @@ import { BrainstormChat } from '@/components/panels/BrainstormChat';
 import { IdeaBoard } from '@/components/panels/IdeaBoard';
 import { KanbanBoard } from '@/components/panels/KanbanBoard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import Link from 'next/link';
 
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -80,7 +81,13 @@ export default function Home() {
           <div className="flex-1 flex flex-col min-h-0">
             <BrainstormChat sessionId={activeSession?.id} />
           </div>
-          <div className="h-64 border-t border-border shrink-0 overflow-hidden">
+          <div className="h-64 border-t border-border shrink-0 overflow-hidden relative">
+            <Link
+              href="/kanban"
+              className="absolute top-2 right-2 z-10 text-xs text-muted-foreground hover:text-foreground transition-colors bg-background/80 backdrop-blur px-2 py-1 rounded border border-border"
+            >
+              Full View →
+            </Link>
             <KanbanBoard />
           </div>
         </div>
